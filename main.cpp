@@ -1,0 +1,645 @@
+#include <iostream>
+#include <Windows.h>
+#include <ctime>
+#include <fstream>
+#include <opencv2/opencv.hpp>
+/*
+* Created by Suzhi_Zhang on 2021/5/26
+* https://1keven1.github.io/
+*/
+/*
+* 由于使用了OpenCV库，所以没有配置OpenCV则无法编译本代码
+* VS2019 OpenCV配置方式：https://1keven1.github.io/2021/01/29/%E3%80%90C-%E3%80%91VS2019%E9%85%8D%E7%BD%AEOpenCV%E5%B9%B6%E8%BF%9B%E8%A1%8C%E6%B5%8B%E8%AF%95/
+* 四联通A*算法实现
+* 一切坐标以左上角为原点，从0开始计数，横向X轴纵向Y轴
+*/
+
+// 常量
+int windowX;	// 屏幕宽度
+int windowY;	// 屏幕高度
+int gridNumX;	// 网格列数
+int gridNumY;	// 网格行数
+
+constexpr float gridLineWidth = 2;										// 网格边线宽度
+const cv::Vec3f backgroundColor = cv::Vec3f(0.2, 0.2, 0.2);				// 背景颜色
+const cv::Vec3f gridLineColor = cv::Vec3f(1, 1, 1);						// 网格边线颜色
+const cv::Vec3f normalGridBackgroundColor = cv::Vec3f(0.1, 0.1, 0.1);	// 普通网格颜色
+const cv::Vec3f blockColor = cv::Vec3f(1, 0, 0);						// 不可通过网格颜色
+const cv::Vec3f startColor = cv::Vec3f(0, 1, 0);						// 开始网格颜色
+const cv::Vec3f goalColor = cv::Vec3f(1, 0, 1);							// 目标网格颜色
+const cv::Vec3f routeColor = cv::Vec3f(0.7, 0.5, 0);					// 路径网格颜色
+
+// 通过屏幕坐标获取像素点数组下标
+int GetFrameBufferNumByCoord(int x, int y)
+{
+	return y * windowX + x;
+}
+
+// 网格种类
+enum GridType
+{
+	NORMAL,
+	BLOCK,
+	START,
+	GOAL,
+	ROUTE
+};
+
+// 网格结构体
+struct Grid
+{
+public:
+	// 构造函数
+	Grid()
+	{
+		_x = 0;
+		_y = 0;
+		_centerX = 0;
+		_centerY = 0;
+		_height = 0;
+		_width = 0;
+		bBlock = false;
+		_type = NORMAL;
+	}
+	Grid(const int x, const int y)
+	{
+		_x = x;
+		_y = y;
+		_centerX = 0;
+		_centerY = 0;
+		_height = 0;
+		_width = 0;
+		bBlock = false;
+		_type = NORMAL;
+	}
+
+	// 设置网格编号
+	void SetIndex(int x, int y)
+	{
+		_x = x;
+		_y = y;
+	}
+
+	// 设置网格可通过性
+	void SetBlock(const bool& b)
+	{
+		bBlock = b;
+		if (b) _type = BLOCK;
+		else _type = NORMAL;
+	}
+
+	// 设置网格数据
+	void SetData(float x, float y, float width, float height)
+	{
+		_centerX = x;
+		_centerY = y;
+		_width = width;
+		_height = height;
+	}
+
+	// 设置网格种类
+	void SetType(const GridType& type)
+	{
+		_type = type;
+	}
+
+	// 设置网格父网格
+	void SetParent(Grid* parent)
+	{
+		_parent = parent;
+	}
+
+	// 设置网格Cost
+	void SetCost(Grid* goal)
+	{
+		// GCost
+		if (_type == START) // 如果是开始网格
+		{
+			_gCost = 0;
+		}
+		else // 如果不是开始网格
+		{
+			_gCost = _parent->GetGCost() + 1;
+		}
+
+		// HCost
+		int endX, endY;
+		std::tie(endX, endY) = goal->GetIndex();
+		_hCost = abs(endX - _x) + abs(endY - _y);
+
+		// FCost
+		_fCost = _gCost + _hCost;
+	}
+
+	// 获取网格可通过性
+	bool GetBlock()
+	{
+		return bBlock;
+	}
+
+	// 获取网格种类
+	GridType GetType()
+	{
+		return _type;
+	}
+
+	// 获取网格GCost
+	float GetGCost()
+	{
+		return _gCost;
+	}
+
+	// 获取网格HCost
+	float GetHCost()
+	{
+		return _hCost;
+	}
+
+	// 获取网格FCost
+	float GetFCost()
+	{
+		return _fCost;
+	}
+
+	// 获取网格父网格
+	Grid* GetParent()
+	{
+		return _parent;
+	}
+
+	// 获取网格编号
+	std::tuple<float, float> GetIndex()
+	{
+		return { _x, _y };
+	}
+
+	// 绘制网格
+	void Draw(std::vector<cv::Vec3f>& frameBuffer)
+	{
+		for (int j = (int)(_centerY - _height * 0.5); j < (int)(_centerY + _height * 0.5); j++)
+		{
+			for (int i = (int)(_centerX - _width * 0.5); i < (int)(_centerX + _width * 0.5); i++)
+			{
+				// 防止数组越界
+				if (i > windowX - 1) i = windowX - 1;
+				if (j > windowY - 1) j = windowY - 1;
+				// 绘制
+				switch (_type)
+				{
+				case NORMAL:
+					if(abs(i - _centerX) > _width * 0.5 - gridLineWidth || abs(j - _centerY) > _height * 0.5 - gridLineWidth) 
+						frameBuffer[GetFrameBufferNumByCoord(i, j)] = gridLineColor;
+					else frameBuffer[GetFrameBufferNumByCoord(i, j)] = normalGridBackgroundColor;
+					break;
+				case BLOCK:
+					if (abs(i - _centerX) > _width * 0.5 - gridLineWidth || abs(j - _centerY) > _height * 0.5 - gridLineWidth) 
+						frameBuffer[GetFrameBufferNumByCoord(i, j)] = gridLineColor;
+					else frameBuffer[GetFrameBufferNumByCoord(i, j)] = blockColor;
+					break;
+				case START:
+					if (abs(i - _centerX) > _width * 0.5 - gridLineWidth || abs(j - _centerY) > _height * 0.5 - gridLineWidth) 
+						frameBuffer[GetFrameBufferNumByCoord(i, j)] = gridLineColor;
+					else frameBuffer[GetFrameBufferNumByCoord(i, j)] = startColor;
+					break;
+				case GOAL:
+					if (abs(i - _centerX) > _width * 0.5 - gridLineWidth || abs(j - _centerY) > _height * 0.5 - gridLineWidth) 
+						frameBuffer[GetFrameBufferNumByCoord(i, j)] = gridLineColor;
+					else frameBuffer[GetFrameBufferNumByCoord(i, j)] = goalColor;
+					break;
+				case ROUTE:
+					if (abs(i - _centerX) > _width * 0.5 - gridLineWidth || abs(j - _centerY) > _height * 0.5 - gridLineWidth)
+						frameBuffer[GetFrameBufferNumByCoord(i, j)] = gridLineColor;
+					else frameBuffer[GetFrameBufferNumByCoord(i, j)] = routeColor;
+				}
+			}
+		}
+	}
+
+private:
+	int _x, _y;					// 网格编号
+	float _centerX, _centerY;	// 网格中心点屏幕坐标
+	float _width, _height;		// 网格长宽
+	GridType _type;				// 网格种类
+	bool bBlock;				// 网格可通过性
+
+	// A*算法所用变量
+	int _gCost = 0;				// 开始点走过来的代价
+	int _hCost = 0;				// 距离目标点的距离
+	int _fCost = 0;
+	Grid* _parent = NULL;		// 父网格
+};
+
+// 显示所需变量
+std::vector<Grid> grids;			// 所有网格
+std::vector<cv::Vec3f> frameBuffer;	// Frame Buffer
+Grid* startGrid = NULL;				// 开始点
+Grid* goalGrid = NULL;				// 结束点
+std::vector<Grid*> route;			// 路径点	
+
+// ??通过网格编号获取网格数组下标
+int GetGridNumByIndex(const int& x, const int& y)
+{
+	return y * gridNumX + x;
+}
+
+// 通过屏幕坐标获取网格编号
+std::tuple<int, int> GetGridIndexByCoord(const int& x, const int& y)
+{
+	float gridWidth = static_cast<float>(windowX) / gridNumX;
+	float gridHeight = static_cast<float>(windowY) / gridNumY;
+	int _x, _y;
+	_x = floor(x / gridWidth);
+	_y = floor(y / gridHeight);
+	return { _x, _y };
+}
+
+// 通过屏幕坐标设置网格可通过性
+void SetGridBlockByCoord(const int& x, const int& y, const bool& bBlock)
+{
+	int gridNumX, gridNumY;
+	std::tie(gridNumX, gridNumY) = GetGridIndexByCoord(x, y);
+	grids[GetGridNumByIndex(gridNumX, gridNumY)].SetBlock(bBlock);
+}
+
+// ??通过网格编号设置网格可通过性
+void SetGridBlockByIndex(const int& x, const int& y, const bool& bBlock)
+{
+	grids[GetGridNumByIndex(x, y)].SetBlock(bBlock);
+}
+
+// ??通过屏幕坐标切换网格可通过性
+void ToggleGridBlockByCoord(const int& x, const int& y)
+{
+	int gridNumX, gridNumY;
+	std::tie(gridNumX, gridNumY) = GetGridIndexByCoord(x, y);
+	if (grids[GetGridNumByIndex(gridNumX, gridNumY)].GetBlock())
+	{
+		grids[GetGridNumByIndex(gridNumX, gridNumY)].SetBlock(false);
+	}
+	else
+	{
+		grids[GetGridNumByIndex(gridNumX, gridNumY)].SetBlock(true);
+	}
+}
+
+// ??通过屏幕坐标设置网格种类
+void SetGridTypeByCoord(const int& x, const int& y, const GridType& type)
+{
+	int gridNumX, gridNumY;
+	std::tie(gridNumX, gridNumY) = GetGridIndexByCoord(x, y);
+	grids[GetGridNumByIndex(gridNumX, gridNumY)].SetType(type);
+	std::string tp;
+	switch (type)
+	{
+	case START:
+		tp = "开始点";
+		break;
+	case GOAL:
+		tp = "目标点";
+		break;
+	default:
+		break;
+	}
+	std::cout << "将网格（" << gridNumX << ", " << gridNumY << "）设置成" << tp << std::endl;
+}
+
+// OpenCV: 鼠标事件句柄
+void mouse_handler(int event, int x, int y, int flags, void* userdata)
+{
+	// 点击鼠标左键
+	if (event == cv::EVENT_LBUTTONDOWN)
+	{
+		int gridIndexX, gridIndexY;
+		std::tie(gridIndexX, gridIndexY) = GetGridIndexByCoord(x, y);
+		int gridNum = GetGridNumByIndex(gridIndexX, gridIndexY);
+		// 对于不同种类的网格
+		switch (grids[gridNum].GetType())
+		{
+		case NORMAL:
+			if (!startGrid)
+			{
+				SetGridTypeByCoord(x, y, START);
+				startGrid = &grids[gridNum];
+				return;
+			}
+			if (!goalGrid)
+			{
+				SetGridTypeByCoord(x, y, GOAL);
+				goalGrid = &grids[gridNum];
+				return;
+			}
+			return;
+			break;
+		case BLOCK:
+			if (!startGrid)
+			{
+				SetGridTypeByCoord(x, y, START);
+				startGrid = &grids[gridNum];
+				return;
+			}
+			if (!goalGrid)
+			{
+				SetGridTypeByCoord(x, y, GOAL);
+				goalGrid = &grids[gridNum];
+				return;
+			}
+			return;
+			break;
+		case START:
+			SetGridTypeByCoord(x, y, NORMAL);
+			startGrid = NULL;
+			return;
+			break;
+		case GOAL:
+			SetGridTypeByCoord(x, y, NORMAL);
+			goalGrid = NULL;
+			return;
+			break;
+		}
+	}
+	// 点击鼠标右键
+	if (event == cv::EVENT_RBUTTONDOWN)
+	{
+		int gridIndexX, gridIndexY;
+		std::tie(gridIndexX, gridIndexY) = GetGridIndexByCoord(x, y);
+		int gridNum = GetGridNumByIndex(gridIndexX, gridIndexY);
+		// 对于不同种类的网格
+		switch (grids[gridNum].GetType())
+		{
+		case NORMAL:
+			SetGridBlockByCoord(x, y, true);
+			return;
+			break;
+		case BLOCK:
+			SetGridBlockByCoord(x, y, false);
+			return;
+			break;
+		case START:
+			SetGridBlockByCoord(x, y, true);
+			startGrid = NULL;
+			return;
+			break;
+		case GOAL:
+			SetGridBlockByCoord(x, y, true);
+			goalGrid = NULL;
+			return;
+			break;
+		}
+	}
+}
+
+void ReadConfig()
+{
+	std::ifstream file("config.txt", std::ios::in);
+	if (!file)
+	{
+		std::cout << "读取config文件失败" << std::endl;
+		system("pause");
+	}
+	std::string s;
+	file >> s;
+	file >> windowX >> windowY;
+	file >> s;
+	file >> gridNumX >> gridNumY;
+	file.close();
+}
+
+// 初始化Frame Buffer和网格数组
+void initialization(int windowX, int windowY, int gridX, int gridY)
+{
+	// 初始化Frame Buffer
+	frameBuffer.resize(windowX * windowY);
+	std::fill(frameBuffer.begin(), frameBuffer.end(), backgroundColor);
+	// 初始化Grids数组
+	grids.resize(gridX * gridY);
+	std::fill(grids.begin(), grids.end(), Grid());
+	// 设置Grid的数据
+	for (int j = 0; j < gridY; j++)
+	{
+		for (int i = 0; i < gridX; i++)
+		{
+			float width = static_cast<float>(windowX) / gridX;
+			float height = static_cast<float>(windowY) / gridY;
+			grids[GetGridNumByIndex(i, j)].SetIndex(i, j);
+			grids[GetGridNumByIndex(i, j)].SetData(width * (float)(i + 0.5f), height * (float)(j + 0.5f), width, height);
+		}
+	}
+}
+
+// A*算法：数组中是否包含元素
+bool VectorContainItem(std::vector<Grid*> vector, Grid* item)
+{
+	for (auto _item : vector)
+	{
+		if (_item == item) return true;
+	}
+	return false;
+}
+
+// A*算法：获取所有邻居
+std::vector<Grid*> FindAllNeighbors(Grid* current)
+{
+	std::vector<Grid*> neighbors;
+	int currentX, currentY;
+	std::tie(currentX, currentY) = current->GetIndex();
+	// 上
+	if (currentY > 0)
+	{
+		Grid* neighbor = &grids[GetGridNumByIndex(currentX, currentY - 1)];
+		neighbors.push_back(neighbor);
+	}
+
+	// 下
+	if (currentY < gridNumY - 1)
+	{
+		Grid* neighbor = &grids[GetGridNumByIndex(currentX, currentY + 1)];
+		neighbors.push_back(neighbor);
+	}
+
+	// 左
+	if (currentX > 0)
+	{
+		Grid* neighbor = &grids[GetGridNumByIndex(currentX - 1, currentY)];
+		neighbors.push_back(neighbor);
+	}
+
+	// 右
+	if (currentX < gridNumX - 1)
+	{
+		Grid* neighbor = &grids[GetGridNumByIndex(currentX + 1, currentY)];
+		neighbors.push_back(neighbor);
+	}
+
+	return neighbors;
+}
+
+// A*算法在这
+bool AStar()
+{
+	// A*算法所需变量
+	std::vector<Grid*> openGrid;	// openList
+	std::vector<Grid*> closeGrid;	// closeList
+	Grid* current = NULL;			// 现在计算的节点
+
+	std::cout << "开始寻路" << std::endl;
+	clock_t start = clock();
+
+	// 将开始节点放入Open List
+	startGrid->SetCost(goalGrid);
+	openGrid.push_back(startGrid);
+
+	// 在Open List中有元素的时候进行循环
+	while (openGrid.size() > 0)
+	{
+		// 将current网格设置成Open List中FCost最小的，如果FCost一样的话设置成HCost最小的
+		int minFCost = std::numeric_limits<int>::max();
+		int currentNum = 0;
+		int i = 0;
+		for (auto grid : openGrid)
+		{
+			if (grid->GetFCost() < minFCost)
+			{
+				current = grid;
+				minFCost = grid->GetFCost();
+				currentNum = i;
+			}
+			else if (grid->GetFCost() == minFCost && current)
+			{
+				if (grid->GetHCost() < current->GetHCost())
+				{
+					current = grid;
+					currentNum = i;
+				}
+			}
+			i++;
+		}
+
+		// 将current从open list中移除，加入到close list中
+		openGrid.erase(openGrid.begin() + currentNum);
+		closeGrid.push_back(current);
+		
+		// 如果current是目标点则寻路成功
+		if (current->GetType() == GOAL)
+		{
+			clock_t end = clock();
+			std::cout << "寻路成功，用时：" << end - start << "毫秒" << std::endl;
+			return true;
+		}
+
+		// 对于每一个邻居网格
+		auto neighbors = FindAllNeighbors(current);
+		for (auto neighbor : neighbors)
+		{
+			// 如果在open和close list中或者是墙，则跳过
+			if (neighbor->GetBlock() || VectorContainItem(closeGrid, neighbor) || VectorContainItem(openGrid, neighbor)) 
+				continue;
+			else
+			{
+				neighbor->SetParent(current);
+				neighbor->SetCost(goalGrid);
+				openGrid.push_back(neighbor);
+			}
+		}
+
+	}
+	std::cout << "失败嘞" << std::endl;
+	return false;
+}
+
+// 回溯所有路径节点，储存在数组里
+void AddAllRouteGridToVector(Grid* grid)
+{
+	if (grid->GetParent())
+	{
+		route.push_back(grid);
+		AddAllRouteGridToVector(grid->GetParent());
+	}
+	else
+	{
+		return;
+	}
+}
+
+// 显示路径点
+void ShowRoute()
+{
+	for (auto routeGrid : route)
+	{
+		if(routeGrid->GetType() != GOAL) routeGrid->SetType(ROUTE);
+	}
+}
+
+// 重新开始
+void Restart()
+{
+	system("cls");
+	initialization(windowX, windowY, gridNumX, gridNumY);
+	startGrid = NULL;
+	goalGrid = NULL;
+	route.clear();
+}
+
+// 主函数
+int main()
+{
+	int frameCount = 0;
+	bool bFinish = false;
+
+	ReadConfig();
+
+	// 初始化
+	initialization(windowX, windowY, gridNumX, gridNumY);
+
+	int key = -1;
+	while (key != 27) // 如果没有按ESC
+	{
+		// 绘制所有网格
+		for (auto& grid : grids)
+		{
+			grid.Draw(frameBuffer);
+		}
+
+		// 如果开始点和结束点都指定了，开始寻路
+		if (startGrid && goalGrid)
+		{
+			bool bSuccess = AStar();
+			if (bSuccess) // 如果寻路成功
+			{
+				AddAllRouteGridToVector(goalGrid);
+				ShowRoute();
+			}
+
+			// 绘制
+			for (auto& grid : grids)
+			{
+				grid.Draw(frameBuffer);
+			}
+			bFinish = true;
+		}
+
+		// OpenCV：显示
+		cv::Mat window = cv::Mat(windowX, windowY, CV_32FC3, frameBuffer.data());
+		cv::cvtColor(window, window, cv::COLOR_BGR2RGB);
+		cv::namedWindow("A*", cv::WINDOW_AUTOSIZE);
+		cv::setMouseCallback("A*", mouse_handler, nullptr);
+
+		frameCount ++;
+		// std::cout << frameCount << std::endl;
+
+		cv::imshow("A*", window);
+		
+		key = cv::waitKey(1);
+
+		// 如果寻路完成
+		if (bFinish)
+		{
+			system("pause");
+			// 按下任意键，重新开始
+			Restart();
+			frameCount = 0;
+			bFinish = false;
+		}
+	}
+
+	return 0;
+}
