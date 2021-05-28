@@ -1,4 +1,7 @@
-屏幕宽高：
+ScreenConfig(256-2048)
 700 700
-网格数量：
+GridNum(5-64)
 16 16
+GridLineWidth(1-3)
+2
+End

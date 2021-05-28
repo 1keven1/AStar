@@ -14,13 +14,14 @@
 * 一切坐标以左上角为原点，从0开始计数，横向X轴纵向Y轴
 */
 
-// 常量
-int windowX;	// 屏幕宽度
-int windowY;	// 屏幕高度
-int gridNumX;	// 网格列数
-int gridNumY;	// 网格行数
+// 全局变量
+int windowHeight;		// 屏幕高度
+int windowWidth;		// 屏幕宽度
+int gridNumX;			// 网格列数
+int gridNumY;			// 网格行数
+int gridLineWidth;		// 网格边线宽度
 
-constexpr float gridLineWidth = 2;										// 网格边线宽度
+// 常量
 const cv::Vec3f backgroundColor = cv::Vec3f(0.2, 0.2, 0.2);				// 背景颜色
 const cv::Vec3f gridLineColor = cv::Vec3f(1, 1, 1);						// 网格边线颜色
 const cv::Vec3f normalGridBackgroundColor = cv::Vec3f(0.1, 0.1, 0.1);	// 普通网格颜色
@@ -32,7 +33,7 @@ const cv::Vec3f routeColor = cv::Vec3f(0.7, 0.5, 0);					// 路径网格颜色
 // 通过屏幕坐标获取像素点数组下标
 int GetFrameBufferNumByCoord(int x, int y)
 {
-	return y * windowX + x;
+	return y * windowWidth + x;
 }
 
 // 网格种类
@@ -74,7 +75,7 @@ public:
 	}
 
 	// 设置网格编号
-	void SetIndex(int x, int y)
+	void SetIndex(const int& x,const int& y)
 	{
 		_x = x;
 		_y = y;
@@ -89,7 +90,7 @@ public:
 	}
 
 	// 设置网格数据
-	void SetData(float x, float y, float width, float height)
+	void SetData(const float& x, const float& y, const float& width, const float& height)
 	{
 		_centerX = x;
 		_centerY = y;
@@ -104,13 +105,13 @@ public:
 	}
 
 	// 设置网格父网格
-	void SetParent(Grid* parent)
+	void SetParent(Grid* const parent)
 	{
 		_parent = parent;
 	}
 
 	// 设置网格Cost
-	void SetCost(Grid* goal)
+	void SetCost(Grid* const goal)
 	{
 		// GCost
 		if (_type == START) // 如果是开始网格
@@ -132,77 +133,77 @@ public:
 	}
 
 	// 获取网格可通过性
-	bool GetBlock()
+	const bool GetBlock()const
 	{
 		return bBlock;
 	}
 
 	// 获取网格种类
-	GridType GetType()
+	const GridType GetType()const
 	{
 		return _type;
 	}
 
 	// 获取网格GCost
-	float GetGCost()
+	const float GetGCost()const
 	{
 		return _gCost;
 	}
 
 	// 获取网格HCost
-	float GetHCost()
+	const float GetHCost()const
 	{
 		return _hCost;
 	}
 
 	// 获取网格FCost
-	float GetFCost()
+	const float GetFCost()const
 	{
 		return _fCost;
 	}
 
 	// 获取网格父网格
-	Grid* GetParent()
+	Grid* const GetParent()const
 	{
 		return _parent;
 	}
 
 	// 获取网格编号
-	std::tuple<float, float> GetIndex()
+	const std::tuple<float, float> GetIndex()const
 	{
 		return { _x, _y };
 	}
 
 	// 绘制网格
-	void Draw(std::vector<cv::Vec3f>& frameBuffer)
+	void Draw(std::vector<cv::Vec3f>& frameBuffer)const
 	{
 		for (int j = (int)(_centerY - _height * 0.5); j < (int)(_centerY + _height * 0.5); j++)
 		{
 			for (int i = (int)(_centerX - _width * 0.5); i < (int)(_centerX + _width * 0.5); i++)
 			{
 				// 防止数组越界
-				if (i > windowX - 1) i = windowX - 1;
-				if (j > windowY - 1) j = windowY - 1;
+				if (j > windowHeight - 1) i = windowHeight - 1;
+				if (i > windowWidth - 1) j = windowWidth - 1;
 				// 绘制
 				switch (_type)
 				{
 				case NORMAL:
-					if(abs(i - _centerX) > _width * 0.5 - gridLineWidth || abs(j - _centerY) > _height * 0.5 - gridLineWidth) 
+					if (abs(i - _centerX) > _width * 0.5 - gridLineWidth || abs(j - _centerY) > _height * 0.5 - gridLineWidth)
 						frameBuffer[GetFrameBufferNumByCoord(i, j)] = gridLineColor;
 					else frameBuffer[GetFrameBufferNumByCoord(i, j)] = normalGridBackgroundColor;
 					break;
 				case BLOCK:
-					if (abs(i - _centerX) > _width * 0.5 - gridLineWidth || abs(j - _centerY) > _height * 0.5 - gridLineWidth) 
+					if (abs(i - _centerX) > _width * 0.5 - gridLineWidth || abs(j - _centerY) > _height * 0.5 - gridLineWidth)
 						frameBuffer[GetFrameBufferNumByCoord(i, j)] = gridLineColor;
 					else frameBuffer[GetFrameBufferNumByCoord(i, j)] = blockColor;
 					break;
 				case START:
-					if (abs(i - _centerX) > _width * 0.5 - gridLineWidth || abs(j - _centerY) > _height * 0.5 - gridLineWidth) 
+					if (abs(i - _centerX) > _width * 0.5 - gridLineWidth || abs(j - _centerY) > _height * 0.5 - gridLineWidth)
 						frameBuffer[GetFrameBufferNumByCoord(i, j)] = gridLineColor;
 					else frameBuffer[GetFrameBufferNumByCoord(i, j)] = startColor;
 					break;
 				case GOAL:
-					if (abs(i - _centerX) > _width * 0.5 - gridLineWidth || abs(j - _centerY) > _height * 0.5 - gridLineWidth) 
+					if (abs(i - _centerX) > _width * 0.5 - gridLineWidth || abs(j - _centerY) > _height * 0.5 - gridLineWidth)
 						frameBuffer[GetFrameBufferNumByCoord(i, j)] = gridLineColor;
 					else frameBuffer[GetFrameBufferNumByCoord(i, j)] = goalColor;
 					break;
@@ -236,7 +237,7 @@ Grid* startGrid = NULL;				// 开始点
 Grid* goalGrid = NULL;				// 结束点
 std::vector<Grid*> route;			// 路径点	
 
-// ??通过网格编号获取网格数组下标
+// 通过网格编号获取网格数组下标
 int GetGridNumByIndex(const int& x, const int& y)
 {
 	return y * gridNumX + x;
@@ -245,8 +246,8 @@ int GetGridNumByIndex(const int& x, const int& y)
 // 通过屏幕坐标获取网格编号
 std::tuple<int, int> GetGridIndexByCoord(const int& x, const int& y)
 {
-	float gridWidth = static_cast<float>(windowX) / gridNumX;
-	float gridHeight = static_cast<float>(windowY) / gridNumY;
+	float gridWidth = static_cast<float>(windowWidth) / gridNumX;
+	float gridHeight = static_cast<float>(windowHeight) / gridNumY;
 	int _x, _y;
 	_x = floor(x / gridWidth);
 	_y = floor(y / gridHeight);
@@ -261,13 +262,13 @@ void SetGridBlockByCoord(const int& x, const int& y, const bool& bBlock)
 	grids[GetGridNumByIndex(gridNumX, gridNumY)].SetBlock(bBlock);
 }
 
-// ??通过网格编号设置网格可通过性
+// 通过网格编号设置网格可通过性
 void SetGridBlockByIndex(const int& x, const int& y, const bool& bBlock)
 {
 	grids[GetGridNumByIndex(x, y)].SetBlock(bBlock);
 }
 
-// ??通过屏幕坐标切换网格可通过性
+// 通过屏幕坐标切换网格可通过性
 void ToggleGridBlockByCoord(const int& x, const int& y)
 {
 	int gridNumX, gridNumY;
@@ -282,7 +283,7 @@ void ToggleGridBlockByCoord(const int& x, const int& y)
 	}
 }
 
-// ??通过屏幕坐标设置网格种类
+// 通过屏幕坐标设置网格种类
 void SetGridTypeByCoord(const int& x, const int& y, const GridType& type)
 {
 	int gridNumX, gridNumY;
@@ -291,6 +292,9 @@ void SetGridTypeByCoord(const int& x, const int& y, const GridType& type)
 	std::string tp;
 	switch (type)
 	{
+	case NORMAL:
+		tp = "正常网格";
+		break;
 	case START:
 		tp = "开始点";
 		break;
@@ -390,22 +394,92 @@ void mouse_handler(int event, int x, int y, int flags, void* userdata)
 
 void ReadConfig()
 {
+	bool bReadScreenConfig = false;
+	bool bReadGridNum = false;
+	bool bReadGridLineWidth = false;
+
 	std::ifstream file("config.txt", std::ios::in);
 	if (!file)
 	{
-		std::cout << "读取config文件失败" << std::endl;
+		std::cout << "WARNING: 读取config文件失败" << std::endl;
 		system("pause");
+		exit(0);
 	}
-	std::string s;
-	file >> s;
-	file >> windowX >> windowY;
-	file >> s;
-	file >> gridNumX >> gridNumY;
+
+	while (1)
+	{
+		if (file.eof())
+		{
+			std::cout << "WARNING: config文件无结束指令\"END\"" << std::endl;
+			system("pause");
+			exit(0);
+		}
+
+		std::string s;
+		file >> s;
+		if (s.compare("ScreenConfig(256-2048)") == 0)
+		{
+			file >> windowHeight >> windowWidth;
+			bReadScreenConfig = true;
+		}
+		else if (s.compare("GridNum(5-64)") == 0)
+		{
+			file >> gridNumX >> gridNumY;
+			bReadGridNum = true;
+		}
+		else if (s.compare("GridLineWidth(1-3)") == 0)
+		{
+			file >> gridLineWidth;
+			bReadGridLineWidth = true;
+		}
+		else if (s.compare("End") == 0)
+		{
+			if (!bReadScreenConfig)
+			{
+				std::cout << "WARNING: config：丢失属性：ScreenConfig" << std::endl;
+				system("pause");
+				exit(0);
+			}
+			if (!bReadGridNum)
+			{
+				std::cout << "WARNING: config：丢失属性：GridNum" << std::endl;
+				system("pause");
+				exit(0);
+			}
+			if (!bReadGridLineWidth)
+			{
+				std::cout << "WARNING: config：丢失属性：GridLineWidth" << std::endl;
+				system("pause");
+				exit(0);
+			}
+			else
+			{
+				std::cout << "读取Config文件成功" << std::endl;
+				std::cout << "屏幕宽高：" << windowWidth << "x" << windowHeight << std::endl;
+				std::cout << "网格数量：" << gridNumX << "x" << gridNumY << std::endl;
+				std::cout << "网格线粗细：" << gridLineWidth << std::endl;
+				std::cout << "======================================" << std::endl;
+				break;
+			}
+		}
+		else
+		{
+			std::cout << "WARNING: config文件中有未知属性：" << s << std::endl;
+			system("pause");
+			exit(0);
+			break;
+		}
+	}
 	file.close();
 }
 
+const void CheckConfig()
+{
+
+}
+
 // 初始化Frame Buffer和网格数组
-void initialization(int windowX, int windowY, int gridX, int gridY)
+void initialization(const int& windowX, const int& windowY, const int& gridX, const int& gridY)
 {
 	// 初始化Frame Buffer
 	frameBuffer.resize(windowX * windowY);
@@ -418,8 +492,8 @@ void initialization(int windowX, int windowY, int gridX, int gridY)
 	{
 		for (int i = 0; i < gridX; i++)
 		{
-			float width = static_cast<float>(windowX) / gridX;
-			float height = static_cast<float>(windowY) / gridY;
+			float width = static_cast<float>(windowY) / gridX;
+			float height = static_cast<float>(windowX) / gridY;
 			grids[GetGridNumByIndex(i, j)].SetIndex(i, j);
 			grids[GetGridNumByIndex(i, j)].SetData(width * (float)(i + 0.5f), height * (float)(j + 0.5f), width, height);
 		}
@@ -517,7 +591,7 @@ bool AStar()
 		// 将current从open list中移除，加入到close list中
 		openGrid.erase(openGrid.begin() + currentNum);
 		closeGrid.push_back(current);
-		
+
 		// 如果current是目标点则寻路成功
 		if (current->GetType() == GOAL)
 		{
@@ -531,7 +605,7 @@ bool AStar()
 		for (auto neighbor : neighbors)
 		{
 			// 如果在open和close list中或者是墙，则跳过
-			if (neighbor->GetBlock() || VectorContainItem(closeGrid, neighbor) || VectorContainItem(openGrid, neighbor)) 
+			if (neighbor->GetBlock() || VectorContainItem(closeGrid, neighbor) || VectorContainItem(openGrid, neighbor))
 				continue;
 			else
 			{
@@ -547,7 +621,7 @@ bool AStar()
 }
 
 // 回溯所有路径节点，储存在数组里
-void AddAllRouteGridToVector(Grid* grid)
+void AddAllRouteGridToVector(Grid* const grid)
 {
 	if (grid->GetParent())
 	{
@@ -565,7 +639,7 @@ void ShowRoute()
 {
 	for (auto routeGrid : route)
 	{
-		if(routeGrid->GetType() != GOAL) routeGrid->SetType(ROUTE);
+		if (routeGrid->GetType() != GOAL) routeGrid->SetType(ROUTE);
 	}
 }
 
@@ -573,7 +647,8 @@ void ShowRoute()
 void Restart()
 {
 	system("cls");
-	initialization(windowX, windowY, gridNumX, gridNumY);
+	ReadConfig();
+	initialization(windowHeight, windowWidth, gridNumX, gridNumY);
 	startGrid = NULL;
 	goalGrid = NULL;
 	route.clear();
@@ -588,7 +663,7 @@ int main()
 	ReadConfig();
 
 	// 初始化
-	initialization(windowX, windowY, gridNumX, gridNumY);
+	initialization(windowHeight, windowWidth, gridNumX, gridNumY);
 
 	int key = -1;
 	while (key != 27) // 如果没有按ESC
@@ -618,16 +693,16 @@ int main()
 		}
 
 		// OpenCV：显示
-		cv::Mat window = cv::Mat(windowX, windowY, CV_32FC3, frameBuffer.data());
+		cv::Mat window = cv::Mat(windowHeight, windowWidth, CV_32FC3, frameBuffer.data());
 		cv::cvtColor(window, window, cv::COLOR_BGR2RGB);
 		cv::namedWindow("A*", cv::WINDOW_AUTOSIZE);
 		cv::setMouseCallback("A*", mouse_handler, nullptr);
 
-		frameCount ++;
+		frameCount++;
 		// std::cout << frameCount << std::endl;
 
 		cv::imshow("A*", window);
-		
+
 		key = cv::waitKey(1);
 
 		// 如果寻路完成
