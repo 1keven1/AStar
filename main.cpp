@@ -10,7 +10,6 @@
 /*
 * 由于使用了OpenCV库，所以没有配置OpenCV则无法编译
 * VS2019 OpenCV配置方式：https://1keven1.github.io/2021/01/29/%E3%80%90C-%E3%80%91VS2019%E9%85%8D%E7%BD%AEOpenCV%E5%B9%B6%E8%BF%9B%E8%A1%8C%E6%B5%8B%E8%AF%95/
-* 四联通A*算法实现
 * 一切坐标以左上角为原点，从0开始计数，横向X轴纵向Y轴
 */
 
@@ -235,7 +234,8 @@ std::vector<Grid> grids;			// 所有网格
 std::vector<cv::Vec3f> frameBuffer;	// Frame Buffer
 Grid* startGrid = NULL;				// 开始点
 Grid* goalGrid = NULL;				// 结束点
-std::vector<Grid*> route;			// 路径点	
+std::vector<Grid*> route;			// 路径点
+std::function<bool()> aStarFunc;	// 储存A星算法函数的函数指针
 
 // 通过网格编号获取网格数组下标
 int GetGridNumByIndex(const int& x, const int& y)
@@ -402,114 +402,6 @@ void mouse_handler(int event, int x, int y, int flags, void* userdata)
 	}
 }
 
-// 读取配置文件
-void ReadConfig()
-{
-	bool bReadScreenConfig = false;
-	bool bReadGridNum = false;
-	bool bReadGridLineWidth = false;
-
-	std::ifstream file("config.txt", std::ios::in);
-	if (!file)
-	{
-		std::cout << "WARNING: 读取config文件失败" << std::endl;
-		system("pause");
-		exit(0);
-	}
-
-	while (1)
-	{
-		if (file.eof())
-		{
-			std::cout << "WARNING: config文件无结束指令\"END\"" << std::endl;
-			system("pause");
-			exit(0);
-		}
-
-		std::string s;
-		file >> s;
-		if (s.compare("ScreenConfig(256-2048)") == 0)
-		{
-			file >> windowHeight >> windowWidth;
-			bReadScreenConfig = true;
-		}
-		else if (s.compare("GridNum(5-64)") == 0)
-		{
-			file >> gridNumX >> gridNumY;
-			bReadGridNum = true;
-		}
-		else if (s.compare("GridLineWidth(1-3)") == 0)
-		{
-			file >> gridLineWidth;
-			bReadGridLineWidth = true;
-		}
-		else if (s.compare("End") == 0)
-		{
-			if (!bReadScreenConfig)
-			{
-				std::cout << "WARNING: config：丢失属性：ScreenConfig" << std::endl;
-				system("pause");
-				exit(0);
-			}
-			if (!bReadGridNum)
-			{
-				std::cout << "WARNING: config：丢失属性：GridNum" << std::endl;
-				system("pause");
-				exit(0);
-			}
-			if (!bReadGridLineWidth)
-			{
-				std::cout << "WARNING: config：丢失属性：GridLineWidth" << std::endl;
-				system("pause");
-				exit(0);
-			}
-			else
-			{
-				std::cout << "读取Config文件成功" << std::endl;
-				std::cout << "屏幕宽高：" << windowWidth << "x" << windowHeight << std::endl;
-				std::cout << "网格数量：" << gridNumX << "x" << gridNumY << std::endl;
-				std::cout << "网格线粗细：" << gridLineWidth << std::endl;
-				std::cout << "======================================" << std::endl;
-				break;
-			}
-		}
-		else
-		{
-			std::cout << "WARNING: config文件中有未知属性：" << s << std::endl;
-			system("pause");
-			exit(0);
-			break;
-		}
-	}
-	file.close();
-}
-
-// 检查配置文件
-void CheckConfig()
-{
-	bool bWarning = false;
-	if (windowHeight > 2048 || windowWidth > 2048 || windowHeight < 256 || windowWidth < 256)
-	{
-		std::cout << "WARNING: config：属性越界：ScreenConfig" << std::endl;
-		bWarning = true;
-	}
-	if (gridNumX > 64 || gridNumY > 64 || gridNumX < 5 || gridNumY < 5)
-	{
-		std::cout << "WARNING: config：属性越界：GridNum" << std::endl;
-		bWarning = true;
-	}
-	if (gridLineWidth > 3 || gridLineWidth < 1)
-	{
-		std::cout << "WARNING: config：属性越界：GridLineWidth" << std::endl;
-		bWarning = true;
-	}
-
-	if (bWarning)
-	{
-		system("pause");
-		exit(0);
-	}
-}
 
 // 初始化Frame Buffer和网格数组
 void Initialization(const int& windowX, const int& windowY, const int& gridX, const int& gridY)
@@ -534,7 +426,7 @@ void Initialization(const int& windowX, const int& windowY, const int& gridX, co
 }
 
 // A*算法：数组中是否包含元素
-bool VectorContainItem(std::vector<Grid*> vector, Grid*const item)
+bool VectorContainItem(std::vector<Grid*> vector, Grid* const item)
 {
 	for (auto _item : vector)
 	{
@@ -544,7 +436,41 @@ bool VectorContainItem(std::vector<Grid*> vector, Grid*const item)
 }
 
 // A*算法：获取所有邻居
-std::vector<Grid*> FindAllNeighbors(Grid* const current)
+std::vector<Grid*> FindAllNeighbors4Way(Grid* const current)
+{
+	std::vector<Grid*> neighbors;
+	int currentX, currentY;
+	std::tie(currentX, currentY) = current->GetIndex();
+	// 上
+	if (currentY > 0)
+	{
+		Grid* neighbor = &grids[GetGridNumByIndex(currentX, currentY - 1)];
+		neighbors.push_back(neighbor);
+	}
+
+	// 下
+	if (currentY < gridNumY - 1)
+	{
+		Grid* neighbor = &grids[GetGridNumByIndex(currentX, currentY + 1)];
+		neighbors.push_back(neighbor);
+	}
+
+	// 左
+	if (currentX > 0)
+	{
+		Grid* neighbor = &grids[GetGridNumByIndex(currentX - 1, currentY)];
+		neighbors.push_back(neighbor);
+	}
+
+	// 右
+	if (currentX < gridNumX - 1)
+	{
+		Grid* neighbor = &grids[GetGridNumByIndex(currentX + 1, currentY)];
+		neighbors.push_back(neighbor);
+	}
+	return neighbors;
+}
+std::vector<Grid*> FindAllNeighbors8Way(Grid* const current)
 {
 	std::vector<Grid*> neighbors;
 	int currentX, currentY;
@@ -577,11 +503,13 @@ std::vector<Grid*> FindAllNeighbors(Grid* const current)
 		neighbors.push_back(neighbor);
 	}
 
+	// TODO:左上左下右上右下
+
 	return neighbors;
 }
 
 // A*算法在这
-bool AStar()
+bool AStar4Way()
 {
 	// A*算法所需变量
 	std::vector<Grid*> openGrid;	// openList
@@ -634,10 +562,81 @@ bool AStar()
 		}
 
 		// 对于每一个邻居网格
-		auto neighbors = FindAllNeighbors(current);
+		auto neighbors = FindAllNeighbors4Way(current);
 		for (auto neighbor : neighbors)
 		{
 			// 如果在open和close list中或者是墙，则跳过
+			if (neighbor->GetBlock() || VectorContainItem(closeGrid, neighbor) || VectorContainItem(openGrid, neighbor))
+				continue;
+			else
+			{
+				neighbor->SetParent(current);
+				neighbor->SetCost(goalGrid);
+				openGrid.push_back(neighbor);
+			}
+		}
+
+	}
+	std::cout << "失败嘞" << std::endl;
+	return false;
+}
+bool AStar8Way()
+{
+	// A*算法所需变量
+	std::vector<Grid*> openGrid;	// openList
+	std::vector<Grid*> closeGrid;	// closeList
+	Grid* current = NULL;			// 现在计算的节点
+
+	std::cout << "开始寻路" << std::endl;
+	clock_t start = clock();
+
+	// 将开始节点放入Open List
+	startGrid->SetCost(goalGrid);
+	openGrid.push_back(startGrid);
+
+	// 在Open List中有元素的时候进行循环
+	while (openGrid.size() > 0)
+	{
+		// 将current网格设置成Open List中FCost最小的，如果FCost一样的话设置成HCost最小的
+		int minFCost = std::numeric_limits<int>::max();
+		int currentNum = 0;
+		int i = 0;
+		for (auto grid : openGrid)
+		{
+			if (grid->GetFCost() < minFCost)
+			{
+				current = grid;
+				minFCost = grid->GetFCost();
+				currentNum = i;
+			}
+			else if (grid->GetFCost() == minFCost && current)
+			{
+				if (grid->GetHCost() < current->GetHCost())
+				{
+					current = grid;
+					currentNum = i;
+				}
+			}
+			i++;
+		}
+
+		// 将current从open list中移除，加入到close list中
+		openGrid.erase(openGrid.begin() + currentNum);
+		closeGrid.push_back(current);
+
+		// 如果current是目标点则寻路成功
+		if (current->GetType() == GOAL)
+		{
+			clock_t end = clock();
+			std::cout << "寻路成功，用时：" << end - start << "毫秒" << std::endl;
+			return true;
+		}
+
+		// 对于每一个邻居网格
+		auto neighbors = FindAllNeighbors8Way(current);
+		for (auto neighbor : neighbors)
+		{
+			// TODO: 8连通更改
 			if (neighbor->GetBlock() || VectorContainItem(closeGrid, neighbor) || VectorContainItem(openGrid, neighbor))
 				continue;
 			else
@@ -676,6 +675,151 @@ void ShowRoute()
 	}
 }
 
+// 读取配置文件
+void ReadConfig()
+{
+	bool bReadScreenConfig = false;
+	bool bReadGridNum = false;
+	bool bReadGridLineWidth = false;
+	bool bReadWay = false;
+	bool b4Way;
+
+	std::ifstream file("config.txt", std::ios::in);
+	if (!file)
+	{
+		std::cout << "WARNING: 读取config文件失败" << std::endl;
+		system("pause");
+		exit(0);
+	}
+
+	while (1)
+	{
+		if (file.eof())
+		{
+			std::cout << "WARNING: config文件无结束指令\"END\"" << std::endl;
+			system("pause");
+			exit(0);
+		}
+
+		std::string s;
+		file >> s;
+		if (s.compare("4WayOr8Way") == 0)
+		{
+			int i;
+			file >> i;
+			if (i == 4)
+			{
+				aStarFunc = AStar4Way;
+				b4Way = true;
+			}
+			if (i == 8)
+			{
+				aStarFunc = AStar8Way;
+				b4Way = false;
+			}
+			if (i != 4 && i != 8)
+			{
+				std::cout << "WARNING: config：属性错误：4WayOr8Way" << std::endl;
+				system("pause");
+				exit(0);
+			}
+			bReadWay = true;
+		}
+		else if (s.compare("ScreenConfig(256-2048)") == 0)
+		{
+			file >> windowHeight >> windowWidth;
+			bReadScreenConfig = true;
+		}
+		else if (s.compare("GridNum(5-64)") == 0)
+		{
+			file >> gridNumX >> gridNumY;
+			bReadGridNum = true;
+		}
+		else if (s.compare("GridLineWidth(1-3)") == 0)
+		{
+			file >> gridLineWidth;
+			bReadGridLineWidth = true;
+		}
+		else if (s.compare("End") == 0)
+		{
+			bool bSuccess = true;
+			if (!bReadScreenConfig)
+			{
+				std::cout << "WARNING: config：丢失属性：ScreenConfig" << std::endl;
+				bSuccess = false;
+			}
+			if (!bReadGridNum)
+			{
+				std::cout << "WARNING: config：丢失属性：GridNum" << std::endl;
+				bSuccess = false;
+			}
+			if (!bReadGridLineWidth)
+			{
+				std::cout << "WARNING: config：丢失属性：GridLineWidth" << std::endl;
+				bSuccess = false;
+			}
+			if (!bReadWay)
+			{
+				std::cout << "WARNING: config：丢失属性：4WayOr8Way" << std::endl;
+				bSuccess = false;
+			}
+
+			if (bSuccess)
+			{
+				std::cout << "读取Config文件成功" << std::endl;
+
+				if (b4Way) std::cout << "四连通A*寻路" << std::endl;
+				else std::cout << "八连通A*寻路" << std::endl;
+				std::cout << "屏幕宽高：" << windowWidth << "x" << windowHeight << std::endl;
+				std::cout << "网格数量：" << gridNumX << "x" << gridNumY << std::endl;
+				std::cout << "网格线粗细：" << gridLineWidth << std::endl;
+				std::cout << "======================================" << std::endl;
+				break;
+			}
+			else
+			{
+				system("pause");
+				exit(0);
+			}
+		}
+		else
+		{
+			std::cout << "WARNING: config文件中有未知属性：" << s << std::endl;
+			system("pause");
+			exit(0);
+			break;
+		}
+	}
+	file.close();
+}
+
+// 检查配置文件
+void CheckConfig()
+{
+	bool bWarning = false;
+	if (windowHeight > 2048 || windowWidth > 2048 || windowHeight < 256 || windowWidth < 256)
+	{
+		std::cout << "WARNING: config：属性越界：ScreenConfig" << std::endl;
+		bWarning = true;
+	}
+	if (gridNumX > 64 || gridNumY > 64 || gridNumX < 5 || gridNumY < 5)
+	{
+		std::cout << "WARNING: config：属性越界：GridNum" << std::endl;
+		bWarning = true;
+	}
+	if (gridLineWidth > 3 || gridLineWidth < 1)
+	{
+		std::cout << "WARNING: config：属性越界：GridLineWidth" << std::endl;
+		bWarning = true;
+	}
+
+	if (bWarning)
+	{
+		system("pause");
+		exit(0);
+	}
+}
+
 // 重新开始
 void Restart()
 {
@@ -693,6 +837,7 @@ int main()
 {
 	int frameCount = 0;
 	bool bFinish = false;
+
 
 	// 读取配置文件
 	ReadConfig();
@@ -713,7 +858,7 @@ int main()
 		// 如果开始点和结束点都指定了，开始寻路
 		if (startGrid && goalGrid)
 		{
-			bool bSuccess = AStar();
+			bool bSuccess = aStarFunc();
 			if (bSuccess) // 如果寻路成功
 			{
 				AddAllRouteGridToVector(goalGrid);
