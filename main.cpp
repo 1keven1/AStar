@@ -8,7 +8,7 @@
 * https://1keven1.github.io/
 */
 /*
-* 由于使用了OpenCV库，所以没有配置OpenCV则无法编译本代码
+* 由于使用了OpenCV库，所以没有配置OpenCV则无法编译
 * VS2019 OpenCV配置方式：https://1keven1.github.io/2021/01/29/%E3%80%90C-%E3%80%91VS2019%E9%85%8D%E7%BD%AEOpenCV%E5%B9%B6%E8%BF%9B%E8%A1%8C%E6%B5%8B%E8%AF%95/
 * 四联通A*算法实现
 * 一切坐标以左上角为原点，从0开始计数，横向X轴纵向Y轴
@@ -75,7 +75,7 @@ public:
 	}
 
 	// 设置网格编号
-	void SetIndex(const int& x,const int& y)
+	void SetIndex(const int& x, const int& y)
 	{
 		_x = x;
 		_y = y;
@@ -390,8 +390,19 @@ void mouse_handler(int event, int x, int y, int flags, void* userdata)
 			break;
 		}
 	}
+
+	// TODO: 将添加障碍物操作改为右键拖动
+	if (event == cv::EVENT_RBUTTONUP)
+	{
+
+	}
+	if (event == cv::EVENT_MOUSEMOVE)
+	{
+
+	}
 }
 
+// 读取配置文件
 void ReadConfig()
 {
 	bool bReadScreenConfig = false;
@@ -473,13 +484,35 @@ void ReadConfig()
 	file.close();
 }
 
-const void CheckConfig()
+// 检查配置文件
+void CheckConfig()
 {
+	bool bWarning = false;
+	if (windowHeight > 2048 || windowWidth > 2048 || windowHeight < 256 || windowWidth < 256)
+	{
+		std::cout << "WARNING: config：属性越界：ScreenConfig" << std::endl;
+		bWarning = true;
+	}
+	if (gridNumX > 64 || gridNumY > 64 || gridNumX < 5 || gridNumY < 5)
+	{
+		std::cout << "WARNING: config：属性越界：GridNum" << std::endl;
+		bWarning = true;
+	}
+	if (gridLineWidth > 3 || gridLineWidth < 1)
+	{
+		std::cout << "WARNING: config：属性越界：GridLineWidth" << std::endl;
+		bWarning = true;
+	}
 
+	if (bWarning)
+	{
+		system("pause");
+		exit(0);
+	}
 }
 
 // 初始化Frame Buffer和网格数组
-void initialization(const int& windowX, const int& windowY, const int& gridX, const int& gridY)
+void Initialization(const int& windowX, const int& windowY, const int& gridX, const int& gridY)
 {
 	// 初始化Frame Buffer
 	frameBuffer.resize(windowX * windowY);
@@ -501,7 +534,7 @@ void initialization(const int& windowX, const int& windowY, const int& gridX, co
 }
 
 // A*算法：数组中是否包含元素
-bool VectorContainItem(std::vector<Grid*> vector, Grid* item)
+bool VectorContainItem(std::vector<Grid*> vector, Grid*const item)
 {
 	for (auto _item : vector)
 	{
@@ -511,7 +544,7 @@ bool VectorContainItem(std::vector<Grid*> vector, Grid* item)
 }
 
 // A*算法：获取所有邻居
-std::vector<Grid*> FindAllNeighbors(Grid* current)
+std::vector<Grid*> FindAllNeighbors(Grid* const current)
 {
 	std::vector<Grid*> neighbors;
 	int currentX, currentY;
@@ -648,7 +681,8 @@ void Restart()
 {
 	system("cls");
 	ReadConfig();
-	initialization(windowHeight, windowWidth, gridNumX, gridNumY);
+	CheckConfig();
+	Initialization(windowHeight, windowWidth, gridNumX, gridNumY);
 	startGrid = NULL;
 	goalGrid = NULL;
 	route.clear();
@@ -660,13 +694,15 @@ int main()
 	int frameCount = 0;
 	bool bFinish = false;
 
+	// 读取配置文件
 	ReadConfig();
+	CheckConfig();
 
 	// 初始化
-	initialization(windowHeight, windowWidth, gridNumX, gridNumY);
+	Initialization(windowHeight, windowWidth, gridNumX, gridNumY);
 
 	int key = -1;
-	while (key != 27) // 如果没有按ESC
+	while (key != 27) // 如果没有按ESC就一直循环
 	{
 		// 绘制所有网格
 		for (auto& grid : grids)
