@@ -8,6 +8,7 @@
 * https://1keven1.github.io/
 */
 /*
+* 单线程A*算法实现
 * 由于使用了OpenCV库，所以没有配置OpenCV则无法编译
 * VS2019 OpenCV配置方式：https://1keven1.github.io/2021/01/29/%E3%80%90C-%E3%80%91VS2019%E9%85%8D%E7%BD%AEOpenCV%E5%B9%B6%E8%BF%9B%E8%A1%8C%E6%B5%8B%E8%AF%95/
 * 一切坐标以左上角为原点，从0开始计数，横向X轴纵向Y轴
@@ -24,7 +25,7 @@ int gridLineWidth;		// 网格边线宽度
 const cv::Vec3f backgroundColor = cv::Vec3f(0.2, 0.2, 0.2);				// 背景颜色
 const cv::Vec3f gridLineColor = cv::Vec3f(1, 1, 1);						// 网格边线颜色
 const cv::Vec3f normalGridBackgroundColor = cv::Vec3f(0.1, 0.1, 0.1);	// 普通网格颜色
-const cv::Vec3f blockColor = cv::Vec3f(1, 0, 0);						// 不可通过网格颜色
+const cv::Vec3f blockColor = cv::Vec3f(0.95, 0.95, 0.95);				// 不可通过网格颜色
 const cv::Vec3f startColor = cv::Vec3f(0, 1, 0);						// 开始网格颜色
 const cv::Vec3f goalColor = cv::Vec3f(1, 0, 1);							// 目标网格颜色
 const cv::Vec3f routeColor = cv::Vec3f(0.7, 0.5, 0);					// 路径网格颜色
@@ -109,8 +110,9 @@ public:
 		_parent = parent;
 	}
 
+	// TODO: 将计算cost放在结构体外
 	// 设置网格Cost
-	void SetCost(Grid* const goal)
+	void SetCost4Way(Grid* const goal)
 	{
 		// GCost
 		if (_type == START) // 如果是开始网格
@@ -126,6 +128,37 @@ public:
 		int endX, endY;
 		std::tie(endX, endY) = goal->GetIndex();
 		_hCost = abs(endX - _x) + abs(endY - _y);
+
+		// FCost
+		_fCost = _gCost + _hCost;
+	}
+	void SetCost8Way(Grid* const goal)
+	{
+		int parentX, parentY;
+		std::tie(parentX, parentY) = _parent->GetIndex();
+		// GCost
+		if (_type == START) // 如果是开始网格
+		{
+			_gCost = 0;
+		}
+		else // 如果不是开始网格
+		{
+			if (parentX == _x || parentY == _y)
+			{
+				_gCost = _parent->GetGCost() + 10;
+			}
+			else
+			{
+				_gCost = _parent->GetGCost() + 14;
+			}
+		}
+
+		// HCost
+		int endX, endY;
+		std::tie(endX, endY) = goal->GetIndex();
+		int dx = abs(endX - _x);
+		int dy = abs(endY - _y);
+		_hCost = std::min(dx, dy) * 14 + abs(dx - dy) * 10;
 
 		// FCost
 		_fCost = _gCost + _hCost;
@@ -308,9 +341,22 @@ void SetGridTypeByCoord(const int& x, const int& y, const GridType& type)
 }
 
 // OpenCV: 鼠标事件句柄
+bool bHoldRButton = false;
+GridType type;
+int mouseX = -1;
+int mouseY = -1;
 void mouse_handler(int event, int x, int y, int flags, void* userdata)
 {
-	// 点击鼠标左键
+	// 如果鼠标在窗口外则初始化
+	if (x < 0 || y < 0)
+	{
+		bHoldRButton = false;
+		mouseX = -1;
+		mouseY = -1;
+		return;
+	}
+
+	// 按下鼠标左键
 	if (event == cv::EVENT_LBUTTONDOWN)
 	{
 		int gridIndexX, gridIndexY;
@@ -361,47 +407,88 @@ void mouse_handler(int event, int x, int y, int flags, void* userdata)
 			break;
 		}
 	}
-	// 点击鼠标右键
+
+	// 按下鼠标右键
 	if (event == cv::EVENT_RBUTTONDOWN)
 	{
+		bHoldRButton = true;
+		mouseX = x;
+		mouseY = y;
 		int gridIndexX, gridIndexY;
 		std::tie(gridIndexX, gridIndexY) = GetGridIndexByCoord(x, y);
 		int gridNum = GetGridNumByIndex(gridIndexX, gridIndexY);
-		// 对于不同种类的网格
-		switch (grids[gridNum].GetType())
+		type = grids[gridNum].GetType();
+	}
+
+	// 松开鼠标右键
+	if (event == cv::EVENT_RBUTTONUP)
+	{
+		bHoldRButton = false;
+		if (mouseX == x && mouseY == y)
 		{
-		case NORMAL:
-			SetGridBlockByCoord(x, y, true);
-			return;
-			break;
-		case BLOCK:
-			SetGridBlockByCoord(x, y, false);
-			return;
-			break;
-		case START:
-			SetGridBlockByCoord(x, y, true);
-			startGrid = NULL;
-			return;
-			break;
-		case GOAL:
-			SetGridBlockByCoord(x, y, true);
-			goalGrid = NULL;
-			return;
-			break;
+			int gridIndexX, gridIndexY;
+			std::tie(gridIndexX, gridIndexY) = GetGridIndexByCoord(x, y);
+			int gridNum = GetGridNumByIndex(gridIndexX, gridIndexY);
+			switch (grids[gridNum].GetType())
+			{
+			case NORMAL:
+				SetGridBlockByCoord(x, y, true);
+				return;
+				break;
+			case BLOCK:
+				SetGridBlockByCoord(x, y, false);
+				return;
+				break;
+			case START:
+				SetGridBlockByCoord(x, y, true);
+				startGrid = NULL;
+				return;
+				break;
+			case GOAL:
+				SetGridBlockByCoord(x, y, true);
+				goalGrid = NULL;
+				return;
+				break;
+			}
+			mouseX = -1;
+			mouseY = -1;
 		}
 	}
 
-	// TODO: 将添加障碍物操作改为右键拖动
-	if (event == cv::EVENT_RBUTTONUP)
-	{
-
-	}
+	// 鼠标移动
 	if (event == cv::EVENT_MOUSEMOVE)
 	{
-
+		if (bHoldRButton)
+		{
+			int gridIndexX, gridIndexY;
+			std::tie(gridIndexX, gridIndexY) = GetGridIndexByCoord(x, y);
+			int gridNum = GetGridNumByIndex(gridIndexX, gridIndexY);
+			bool bBlock = type == BLOCK ? false : true;
+			// 对于不同种类的网格
+			switch (grids[gridNum].GetType())
+			{
+			case NORMAL:
+				SetGridBlockByCoord(x, y, bBlock);
+				return;
+				break;
+			case BLOCK:
+				SetGridBlockByCoord(x, y, bBlock);
+				return;
+				break;
+			case START:
+				SetGridBlockByCoord(x, y, bBlock);
+				startGrid = NULL;
+				return;
+				break;
+			case GOAL:
+				SetGridBlockByCoord(x, y, bBlock);
+				goalGrid = NULL;
+				return;
+				break;
+			}
+		}
 	}
 }
-
 
 // 初始化Frame Buffer和网格数组
 void Initialization(const int& windowX, const int& windowY, const int& gridX, const int& gridY)
@@ -503,9 +590,67 @@ std::vector<Grid*> FindAllNeighbors8Way(Grid* const current)
 		neighbors.push_back(neighbor);
 	}
 
-	// TODO:左上左下右上右下
+	// 左上
+	if (currentX > 0 && currentY > 0)
+	{
+		Grid* neighbor = &grids[GetGridNumByIndex(currentX - 1, currentY - 1)];
+		neighbors.push_back(neighbor);
+	}
+
+	// 左下
+	if (currentX > 0 && currentY < gridNumY - 1)
+	{
+		Grid* neighbor = &grids[GetGridNumByIndex(currentX - 1, currentY + 1)];
+		neighbors.push_back(neighbor);
+	}
+
+	// 右上
+	if (currentX < gridNumX - 1 && currentY > 0)
+	{
+		Grid* neighbor = &grids[GetGridNumByIndex(currentX + 1, currentY - 1)];
+		neighbors.push_back(neighbor);
+	}
+
+	// 右下
+	if (currentX < gridNumX - 1 && currentY < gridNumY - 1)
+	{
+		Grid* neighbor = &grids[GetGridNumByIndex(currentX + 1, currentY + 1)];
+		neighbors.push_back(neighbor);
+	}
 
 	return neighbors;
+}
+
+int CalculateFCost(Grid* const grid, Grid* const parent, Grid* const goal)
+{
+	int gCost, hCost, fCost;
+
+	int gridX, gridY;
+	std::tie(gridX, gridY) = grid->GetIndex();
+	int parentX, parentY;
+	std::tie(parentX, parentY) = parent->GetIndex();
+
+	// GCost
+	if (parentX == gridX || parentY == gridY)
+	{
+		gCost = parent->GetGCost() + 10;
+	}
+	else
+	{
+		gCost = parent->GetGCost() + 14;
+	}
+
+	// HCost
+	int endX, endY;
+	std::tie(endX, endY) = goal->GetIndex();
+	int dx = abs(endX - gridX);
+	int dy = abs(endY - gridY);
+	hCost = std::min(dx, dy) * 14 + abs(dx - dy) * 10;
+
+	// FCost
+	fCost = gCost + hCost;
+
+	return fCost;
 }
 
 // A*算法在这
@@ -516,11 +661,11 @@ bool AStar4Way()
 	std::vector<Grid*> closeGrid;	// closeList
 	Grid* current = NULL;			// 现在计算的节点
 
-	std::cout << "开始寻路" << std::endl;
+	std::cout << "开始四联通寻路" << std::endl;
 	clock_t start = clock();
 
 	// 将开始节点放入Open List
-	startGrid->SetCost(goalGrid);
+	startGrid->SetCost4Way(goalGrid);
 	openGrid.push_back(startGrid);
 
 	// 在Open List中有元素的时候进行循环
@@ -554,7 +699,7 @@ bool AStar4Way()
 		closeGrid.push_back(current);
 
 		// 如果current是目标点则寻路成功
-		if (current->GetType() == GOAL)
+		if (current && current->GetType() == GOAL)
 		{
 			clock_t end = clock();
 			std::cout << "寻路成功，用时：" << end - start << "毫秒" << std::endl;
@@ -571,7 +716,7 @@ bool AStar4Way()
 			else
 			{
 				neighbor->SetParent(current);
-				neighbor->SetCost(goalGrid);
+				neighbor->SetCost4Way(goalGrid);
 				openGrid.push_back(neighbor);
 			}
 		}
@@ -587,11 +732,11 @@ bool AStar8Way()
 	std::vector<Grid*> closeGrid;	// closeList
 	Grid* current = NULL;			// 现在计算的节点
 
-	std::cout << "开始寻路" << std::endl;
+	std::cout << "开始八连通寻路" << std::endl;
 	clock_t start = clock();
 
 	// 将开始节点放入Open List
-	startGrid->SetCost(goalGrid);
+	startGrid->SetCost4Way(goalGrid);
 	openGrid.push_back(startGrid);
 
 	// 在Open List中有元素的时候进行循环
@@ -625,7 +770,7 @@ bool AStar8Way()
 		closeGrid.push_back(current);
 
 		// 如果current是目标点则寻路成功
-		if (current->GetType() == GOAL)
+		if (current && current->GetType() == GOAL)
 		{
 			clock_t end = clock();
 			std::cout << "寻路成功，用时：" << end - start << "毫秒" << std::endl;
@@ -636,17 +781,21 @@ bool AStar8Way()
 		auto neighbors = FindAllNeighbors8Way(current);
 		for (auto neighbor : neighbors)
 		{
-			// TODO: 8连通更改
-			if (neighbor->GetBlock() || VectorContainItem(closeGrid, neighbor) || VectorContainItem(openGrid, neighbor))
+			if (neighbor->GetBlock() || VectorContainItem(closeGrid, neighbor))
 				continue;
-			else
+
+			// 如果该路径FCost更低的话更新该节点的Cost
+			int newFCost = CalculateFCost(neighbor, current, goalGrid);
+			if ((newFCost < neighbor->GetFCost()) || (!VectorContainItem(openGrid, neighbor)))
 			{
 				neighbor->SetParent(current);
-				neighbor->SetCost(goalGrid);
-				openGrid.push_back(neighbor);
+				neighbor->SetCost8Way(goalGrid);
+				if (!VectorContainItem(openGrid, neighbor))
+				{
+					openGrid.push_back(neighbor);
+				}
 			}
 		}
-
 	}
 	std::cout << "失败嘞" << std::endl;
 	return false;
@@ -876,7 +1025,7 @@ int main()
 		// OpenCV：显示
 		cv::Mat window = cv::Mat(windowHeight, windowWidth, CV_32FC3, frameBuffer.data());
 		cv::cvtColor(window, window, cv::COLOR_BGR2RGB);
-		cv::namedWindow("A*", cv::WINDOW_AUTOSIZE);
+		cv::namedWindow("A*", cv::WINDOW_KEEPRATIO);
 		cv::setMouseCallback("A*", mouse_handler, nullptr);
 
 		frameCount++;

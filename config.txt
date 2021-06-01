@@ -1,5 +1,5 @@
 4WayOr8Way
-4
+8
 ScreenConfig(256-2048)
 700 700
 GridNum(5-64)
