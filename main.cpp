@@ -348,7 +348,7 @@ int mouseY = -1;
 void mouse_handler(int event, int x, int y, int flags, void* userdata)
 {
 	// 如果鼠标在窗口外则初始化
-	if (x < 0 || y < 0)
+	if (x < 0 || y < 0 || x > windowWidth || y > windowHeight)
 	{
 		bHoldRButton = false;
 		mouseX = -1;
