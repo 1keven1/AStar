@@ -134,8 +134,6 @@ public:
 	}
 	void SetCost8Way(Grid* const goal)
 	{
-		int parentX, parentY;
-		std::tie(parentX, parentY) = _parent->GetIndex();
 		// GCost
 		if (_type == START) // 如果是开始网格
 		{
@@ -143,6 +141,8 @@ public:
 		}
 		else // 如果不是开始网格
 		{
+			int parentX, parentY;
+			std::tie(parentX, parentY) = _parent->GetIndex();
 			if (parentX == _x || parentY == _y)
 			{
 				_gCost = _parent->GetGCost() + 10;
@@ -661,7 +661,7 @@ bool AStar4Way()
 	std::vector<Grid*> closeGrid;	// closeList
 	Grid* current = NULL;			// 现在计算的节点
 
-	std::cout << "开始四联通寻路" << std::endl;
+	std::cout << "开始四连通寻路" << std::endl;
 	clock_t start = clock();
 
 	// 将开始节点放入Open List
@@ -736,7 +736,7 @@ bool AStar8Way()
 	clock_t start = clock();
 
 	// 将开始节点放入Open List
-	startGrid->SetCost4Way(goalGrid);
+	startGrid->SetCost8Way(goalGrid);
 	openGrid.push_back(startGrid);
 
 	// 在Open List中有元素的时候进行循环
