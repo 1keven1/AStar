@@ -177,19 +177,19 @@ public:
 	}
 
 	// 获取网格GCost
-	const float GetGCost()const
+	const int GetGCost()const
 	{
 		return _gCost;
 	}
 
 	// 获取网格HCost
-	const float GetHCost()const
+	const int GetHCost()const
 	{
 		return _hCost;
 	}
 
 	// 获取网格FCost
-	const float GetFCost()const
+	const int GetFCost()const
 	{
 		return _fCost;
 	}
@@ -1045,6 +1045,5 @@ int main()
 			bFinish = false;
 		}
 	}
-
 	return 0;
 }
